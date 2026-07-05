@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTA VI Wire — Mission Control</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0C0718;
+  --bg2:      #120A24;
+  --card:     #17102E;
+  --card2:    #1E1540;
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(255,255,255,0.13);
+  --pink:     #FF4FA3;
+  --peach:    #FF9E5E;
+  --violet:   #7C4DFF;
+  --acid:     #9BE800;
+  --gold:     #D4AF37;
+  --silver:   #C9CDD4;
+  --txt:      #FFFFFF;
+  --txt2:     #E2D9F3;
+  --muted:    #8A7BAA;
+  --grad:     linear-gradient(135deg,#FF9E5E 0%,#FF4FA3 48%,#7C4DFF 100%);
+  --r:        18px;
+  --r-sm:     12px;
+  --sidebar:  280px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--txt2);
+  font-family:'Barlow',system-ui,sans-serif;
+  font-size:14px;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+.display{font-family:'Barlow Condensed',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;line-height:.92;color:var(--txt)}
+
+/* ── LAYOUT ── */
+.app{display:flex;flex:1;overflow:hidden;height:100vh}
+.sidebar{width:var(--sidebar);min-width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:.3s}
+.sidebar.collapsed{min-width:0;width:0;overflow:hidden}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);background:rgba(12,7,24,.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:10;flex-wrap:wrap}
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* ── SIDEBAR ── */
+.sb-head{padding:20px 18px 12px;border-bottom:1px solid var(--border)}
+.sb-head .logo-row{display:flex;align-items:center;gap:10px}
+.logo-badge{width:34px;height:34px;border-radius:9px;background:var(--grad);display:grid;place-items:center;font-family:'Barlow Condensed';font-weight:900;font-size:12px;color:#120A24;line-height:.9;text-align:center}
+.sb-head h2{font-size:13px;font-weight:700;color:var(--txt)}
+.sb-head p{font-size:11px;color:var(--muted);margin-top:2px}
+.sb-user{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer}
+.sb-user img{width:30px;height:30px;border-radius:50%;object-fit:cover}
+.sb-user .avatar-ph{width:30px;height:30px;border-radius:50%;background:var(--card2);border:1px solid var(--border2);display:grid;place-items:center;font-size:13px}
+.sb-user .info{flex:1;min-width:0}
+.sb-user .info b{display:block;font-size:12px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-user .info span{font-size:11px;color:var(--muted)}
+.sb-section{padding:12px 18px 6px;font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.sb-sessions{flex:1;overflow-y:auto;padding:6px 10px}
+.session-item{padding:10px 10px;border-radius:10px;cursor:pointer;transition:.15s;margin-bottom:4px;border:1px solid transparent}
+.session-item:hover{background:var(--card);border-color:var(--border)}
+.session-item.active{background:var(--card2);border-color:var(--border2)}
+.session-item .s-title{font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-item .s-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:6px}
+.session-item .s-type{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(124,77,255,.2);color:#B09EFF}
+.sb-footer{padding:14px 18px;border-top:1px solid var(--border)}
+.sb-footer button{width:100%;text-align:left;background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;padding:6px 4px;border-radius:8px;transition:.15s;font-family:'Barlow',sans-serif}
+.sb-footer button:hover{background:var(--card);color:var(--txt)}
+
+/* ── TOPBAR ── */
+.menu-btn{width:34px;height:34px;border-radius:9px;background:var(--card);border:1px solid var(--border2);color:var(--txt);cursor:pointer;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.topbar .brand{display:flex;align-items:center;gap:10px}
+.topbar .brand h1{font-size:18px}
+.topbar .brand small{font-size:11px;color:var(--muted);letter-spacing:.2em;display:block;margin-top:1px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ── STYLE TOGGLE ── */
+.style-toggle{display:flex;background:var(--card);border:1px solid var(--border2);border-radius:999px;padding:3px;gap:3px}
+.style-toggle button{border:none;background:transparent;color:var(--muted);font-family:'Barlow',sans-serif;font-weight:700;font-size:12px;padding:7px 16px;border-radius:999px;cursor:pointer;transition:.2s;white-space:nowrap}
+.style-toggle button.active{background:var(--grad);color:#120A24}
+
+/* ── BUTTONS ── */
+.btn{border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;padding:10px 20px;border-radius:999px;transition:.2s;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn-grad{background:var(--grad);color:#160A20;box-shadow:0 6px 24px rgba(255,79,163,.3)}
+.btn-grad:hover{transform:translateY(-1px);box-shadow:0 10px 30px rgba(255,79,163,.45)}
+.btn-ghost{background:rgba(255,255,255,.05);color:var(--txt);border:1px solid var(--border2)}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.btn-sm{padding:7px 14px;font-size:12px}
+.btn-xs{padding:5px 11px;font-size:11px}
+.btn:disabled{opacity:.4;cursor:wait;transform:none!important}
+
+/* ── COUNTDOWN ── */
+.countdown-strip{background:linear-gradient(135deg,rgba(255,79,163,.08),rgba(124,77,255,.12));border:1px solid rgba(255,79,163,.2);border-radius:var(--r);padding:20px 24px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:22px;position:relative;overflow:hidden}
+.countdown-strip::before{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(255,79,163,.15),transparent 70%);pointer-events:none}
+.cd-days{font-size:64px;line-height:1;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cd-label{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-top:4px}
+.cd-units{display:flex;gap:12px}
+.cd-unit{text-align:center;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:56px}
+.cd-unit b{display:block;font-family:'Barlow Condensed';font-weight:900;font-size:22px;color:var(--txt)}
+.cd-unit span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+
+/* ── SETTINGS PANEL ── */
+.settings-panel{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:22px;display:none}
+.settings-panel.open{display:block}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.field input,.field select{background:var(--card2);border:1px solid var(--border2);color:var(--txt);border-radius:10px;padding:10px 14px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:500}
+.field input:focus,.field select:focus{outline:2px solid var(--violet)}
+.field input::placeholder{color:var(--muted)}
+.field .helper{font-size:11px;color:var(--muted);line-height:1.4}
+.field .eye{position:relative}
+.field .eye input{width:100%;padding-right:40px}
+.field .eye button{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+.save-row{margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.save-status{font-size:12px;color:var(--acid)}
+
+/* ── FEED ── */
+.feed-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.feed-head h2{font-size:28px}
+.feed-count{font-size:12px;color:var(--muted);font-weight:600}
+.intel-grid{display:flex;flex-direction:column;gap:14px}
+
+/* ── INTEL CARD ── */
+.intel-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:.2s}
+.intel-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.card-top{padding:18px 20px 14px}
+.card-meta{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.tag{font-family:'Barlow Condensed';font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:6px;display:inline-block}
+.tag.BREAKING{background:rgba(255,79,163,.2);color:#FF8FC8}
+.tag.CONFIRMED{background:rgba(155,232,0,.15);color:#B8F44B}
+.tag.RUMOR{background:rgba(212,175,55,.15);color:#E5C84A}
+.tag.UPDATE{background:rgba(255,158,94,.15);color:#FFBB7A}
+.card-source{font-size:11px;color:var(--muted);margin-left:auto}
+.card-headline{font-size:20px;color:var(--txt);margin-bottom:8px;line-height:1.15}
+.card-summary{font-size:13.5px;color:var(--txt2);line-height:1.6}
+.card-angle{margin-top:10px;background:rgba(124,77,255,.1);border:1px solid rgba(124,77,255,.25);border-radius:10px;padding:9px 13px;font-size:12.5px;color:#C4B2FF;line-height:1.5}
+.card-angle b{color:var(--txt)}
+.card-actions{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,.15)}
+
+/* ── OUTPUT PANEL ── */
+.output-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);margin-top:12px;overflow:hidden}
+.output-head{padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.output-head h4{font-size:14px;font-weight:700;color:var(--txt);flex:1}
+.output-body{padding:16px 18px;overflow-x:auto}
+.output-body pre{font-size:12px;line-height:1.6;color:#D4C8FF;white-space:pre-wrap;word-break:break-word;font-family:'SF Mono',Menlo,monospace}
+
+/* ── SCENE CARDS ── */
+.scenes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px}
+.scene-card{background:var(--card2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px}
+.scene-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+.scene-beat{font-size:13px;font-weight:600;color:var(--txt);margin-bottom:4px}
+.scene-desc{font-size:12px;color:var(--txt2);line-height:1.5;margin-bottom:10px}
+.scene-prompt-preview{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:#B8AADD;font-family:'SF Mono',Menlo,monospace;max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;line-height:1.5;margin-bottom:10px}
+
+/* ── LOADING ── */
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading-card{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--acid);color:#101800;font-weight:700;font-size:13px;padding:12px 24px;border-radius:999px;transition:.3s;z-index:100;opacity:0;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;background:rgba(6,3,14,.85);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border2);border-radius:24px;width:min(600px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-head{padding:20px 24px 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:18px;flex:1}
+.modal-head .x{width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:#fff;cursor:pointer;display:grid;place-items:center}
+.modal-body{padding:18px 24px;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--txt2)}
+.modal-body h4{font-size:14px;font-weight:700;color:var(--txt);margin:14px 0 6px}
+.modal-body code{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-family:'SF Mono',Menlo,monospace;font-size:12px;color:#C4B2FF}
+.modal-body ol{padding-left:18px}
+.modal-body ol li{margin-bottom:8px}
+.modal-foot{padding:14px 24px 20px;border-top:1px solid var(--border);display:flex;gap:10px}
+
+/* ── MISC ── */
+.divider{height:1px;background:var(--border);margin:20px 0}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state .icon{font-size:36px;margin-bottom:12px;opacity:.4}
+.empty-state p{font-size:14px;line-height:1.6}
+@media(max-width:768px){.sidebar{position:fixed;top:0;left:0;height:100vh;z-index:30;transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.content{padding:16px}.countdown-strip{gap:14px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-head">
+    <div class="logo-row">
+      <div class="logo-badge">VI<br>W</div>
+      <div><div class="display" style="font-size:15px">GTA VI Wire</div><p>Mission Control</p></div>
+    </div>
+  </div>
+
+  <div class="sb-user" id="userPanel" onclick="toggleSettings()">
+    <div class="avatar-ph" id="userAvatar">👤</div>
+    <div class="info">
+      <b id="userName">Not signed in</b>
+      <span id="userEmail">Click to configure</span>
+    </div>
+  </div>
+
+  <div class="sb-section">Session history</div>
+  <div class="sb-sessions" id="sessionList">
+    <div class="empty-state" style="padding:30px 10px">
+      <div class="icon">📡</div>
+      <p style="font-size:12px">Sessions appear here after your first intel refresh.</p>
+    </div>
+  </div>
+
+  <div class="sb-footer">
+    <button onclick="clearSessions()">🗑 Clear history</button>
+    <button onclick="openSetupModal()">📖 Setup guide</button>
+    <button onclick="handleSignOut()" id="signOutBtn" style="display:none">↩ Sign out</button>
+  </div>
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+    <div class="brand">
+      <div>
+        <div class="display" style="font-size:20px">GTA VI Wire.</div>
+        <small>@gtaviwire · signal in, content out</small>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="style-toggle" title="Global image style — applies to all JSON prompts">
+        <button id="btn-realistic" class="active" onclick="setStyle('realistic')">⚡ Realistic</button>
+        <button id="btn-illustration" onclick="setStyle('illustration')">🎨 Illustration</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="toggleSettings()">⚙ Settings</button>
+      <button class="btn btn-grad" id="refreshBtn" onclick="refreshIntel()">⚡ Refresh intel</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- SETTINGS PANEL -->
+    <div class="settings-panel" id="settingsPanel">
+      <div class="display" style="font-size:18px;margin-bottom:4px">Configuration.</div>
+      <p style="font-size:12px;color:var(--muted)">Keys stored in your browser only — never sent anywhere except their respective APIs.</p>
+      <div class="settings-grid">
+        <div class="field">
+          <label>Gemini API Key</label>
+          <div class="eye"><input type="password" id="geminiKey" placeholder="AIza..."><button onclick="toggleVis('geminiKey')">👁</button></div>
+          <span class="helper">Get free key → <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--violet)">aistudio.google.com</a></span>
+        </div>
+        <div class="field">
+          <label>Supabase URL</label>
+          <input type="text" id="sbUrl" placeholder="https://xxxx.supabase.co">
+        </div>
+        <div class="field">
+          <label>Supabase Anon Key</label>
+          <div class="eye"><input type="password" id="sbKey" placeholder="eyJh..."><button onclick="toggleVis('sbKey')">👁</button></div>
+        </div>
+        <div class="field">
+          <label>Subtitle style</label>
+          <select id="setSub"><option value="gta-caps">GTA Caps</option><option value="boxed-karaoke">Boxed Karaoke</option><option value="word-pop">Word Pop</option><option value="lower-third">Lower Third</option></select>
+        </div>
+        <div class="field">
+          <label>Accent world</label>
+          <select id="setAccent"><option value="sunset">Sunset</option><option value="dusk">Dusk</option><option value="acid">Acid</option><option value="gunmetal">Gunmetal</option></select>
+        </div>
+        <div class="field">
+          <label>Image target</label>
+          <select id="setImgTarget"><option value="Nano Banana Pro">Nano Banana Pro</option><option value="GPT Image">GPT Image</option><option value="Higgsfield">Higgsfield</option></select>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn btn-grad btn-sm" onclick="saveSettings()">Save settings</button>
+        <button class="btn btn-ghost btn-sm" onclick="googleSignIn()">🔑 Sign in with Google</button>
+        <span class="save-status" id="saveStatus"></span>
+      </div>
+    </div>
+
+    <!-- COUNTDOWN -->
+    <div class="countdown-strip">
+      <div>
+        <div class="cd-days display" id="cdDays">—</div>
+        <div class="cd-label">Days until Leonida.</div>
+      </div>
+      <div class="cd-units">
+        <div class="cd-unit"><b id="cdH">—</b><span>Hrs</span></div>
+        <div class="cd-unit"><b id="cdM">—</b><span>Min</span></div>
+        <div class="cd-unit"><b id="cdS">—</b><span>Sec</span></div>
+      </div>
+      <div style="margin-left:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+        <span style="font-size:12px;color:var(--muted)">Nov 19, 2026 · Leonida</span>
+        <span style="font-size:12px;color:var(--muted)">$79.99 base · $99.99 Ultimate</span>
+      </div>
+    </div>
+
+    <!-- FEED -->
+    <div class="feed-head">
+      <h2 class="display">Intel feed.</h2>
+      <span class="feed-count" id="feedCount"></span>
+    </div>
+    <div class="intel-grid" id="feed">
+      <div class="loading-card">
+        <p>No intel loaded yet. Tap <b>Refresh intel</b> to scan for the latest GTA 6 news.</p>
+        <p style="margin-top:8px;font-size:12px">Requires a Gemini API key in Settings.</p>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ═══════════ SETUP MODAL ═══════════ -->
+<div class="modal-bg" id="setupModal" onclick="if(event.target===this)closeModal('setupModal')">
+  <div class="modal">
+    <div class="modal-head"><h3 class="display">Setup guide.</h3><button class="x" onclick="closeModal('setupModal')">✕</button></div>
+    <div class="modal-body">
+      <h4>1. Get your Gemini API key (free)</h4>
+      <ol>
+        <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--violet)">aistudio.google.com/apikey</a></li>
+        <li>Sign in with Google → Create API key → Copy it</li>
+        <li>Paste it in Settings above and hit Save</li>
+      </ol>
+      <h4>2. Set up Supabase (free tier, for session history)</h4>
+      <ol>
+        <li>Go to <a href="https://supabase.com" target="_blank" style="color:var(--violet)">supabase.com</a> → New project</li>
+        <li>Settings → API → copy <code>Project URL</code> and <code>anon public</code> key</li>
+        <li>Go to SQL Editor and run:<br>
+          <code>CREATE TABLE sessions (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_id text, type text, title text, content jsonb, created_at timestamptz DEFAULT now());</code>
+        </li>
+        <li>Paste URL and key in Settings above</li>
+      </ol>
+      <h4>3. Enable Google Login (requires deployment)</h4>
+      <ol>
+        <li>Deploy this file to <a href="https://vercel.com" target="_blank" style="color:var(--violet)">Vercel</a> or GitHub Pages</li>
+        <li>In Supabase → Authentication → Providers → enable Google</li>
+        <li>Add your deployed URL as redirect URL in both Supabase and Google Console</li>
+        <li>Sign in with Google button will then work from your deployed URL</li>
+      </ol>
+      <h4>4. Local use (no deployment needed)</h4>
+      <p>Everything except Google OAuth works on <code>file://</code> — just open this HTML file directly. Gemini intel fetch, all prompt generators, session storage (localStorage fallback) all work offline-ready.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-grad btn-sm" onclick="closeModal('setupModal')">Got it</button></div>
+  </div>
+</div>
+
+<!-- ═══════════ OUTPUT MODAL ═══════════ -->
+<div class="modal-bg" id="outputModal" onclick="if(event.target===this)closeModal('outputModal')">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-head"><h3 class="display" id="outputTitle">Brief.</h3><button class="x" onclick="closeModal('outputModal')">✕</button></div>
+    <div class="modal-body" id="outputBody" style="padding:0"></div>
+    <div class="modal-foot">
+      <button class="btn btn-grad btn-sm" onclick="copyOutput()">📋 Copy</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('outputModal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const LAUNCH = new Date('2026-11-19T00:00:00');
+let imageStyle = 'realistic';
+let items = [];
+let sb = null;
+let currentUser = null;
+let currentOutput = '';
+let sessions = [];
+
+// ═══════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  initSupabase();
+  tick();
+  setInterval(tick, 1000);
+  const saved = localStorage.getItem('gvw_style') || 'realistic';
+  setStyle(saved, false);
+  loadLocalSessions();
+});
+
+// ═══════════════════════════════════════
+// COUNTDOWN
+// ═══════════════════════════════════════
+function tick() {
+  const d = LAUNCH - new Date();
+  if (d <= 0) { document.getElementById('cdDays').textContent = '0'; return; }
+  document.getElementById('cdDays').textContent = Math.floor(d / 86400000);
+  document.getElementById('cdH').textContent = Math.floor(d / 3600000) % 24;
+  document.getElementById('cdM').textContent = Math.floor(d / 60000) % 60;
+  document.getElementById('cdS').textContent = Math.floor(d / 1000) % 60;
+}
+function daysLeft() { return Math.max(0, Math.floor((LAUNCH - new Date()) / 86400000)); }
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function loadSettings() {
+  const k = ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'];
+  k.forEach(id => { const v = localStorage.getItem('gvw_' + id); if (v && document.getElementById(id)) document.getElementById(id).value = v; });
+}
+function saveSettings() {
+  ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) localStorage.setItem('gvw_' + id, el.value);
+  });
+  initSupabase();
+  document.getElementById('saveStatus').textContent = '✓ Saved';
+  setTimeout(() => document.getElementById('saveStatus').textContent = '', 2000);
+  showToast('Settings saved.');
+}
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+function toggleVis(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+function getKey() { return localStorage.getItem('gvw_geminiKey') || document.getElementById('geminiKey')?.value || ''; }
+function getSetting(id) { return localStorage.getItem('gvw_' + id) || document.getElementById(id)?.value || ''; }
+
+// ═══════════════════════════════════════
+// IMAGE STYLE TOGGLE
+// ═══════════════════════════════════════
+function setStyle(s, save = true) {
+  imageStyle = s;
+  document.getElementById('btn-realistic').classList.toggle('active', s === 'realistic');
+  document.getElementById('btn-illustration').classList.toggle('active', s === 'illustration');
+  if (save) localStorage.setItem('gvw_style', s);
+}
+
+// ═══════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════
+function initSupabase() {
+  const url = getSetting('sbUrl'), key = getSetting('sbKey');
+  if (url && key && window.supabase) {
+    sb = window.supabase.createClient(url, key);
+    checkSession();
+    loadRemoteSessions();
+  }
+}
+async function checkSession() {
+  if (!sb) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) setUser(session.user);
+  sb.auth.onAuthStateChange((_, session) => {
+    if (session?.user) setUser(session.user);
+    else clearUser();
+  });
+}
+function setUser(user) {
+  currentUser = user;
+  document.getElementById('userName').textContent = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Signed in';
+  document.getElementById('userEmail').textContent = user.email || '';
+  if (user.user_metadata?.avatar_url) {
+    document.getElementById('userAvatar').innerHTML = `<img src="${user.user_metadata.avatar_url}" style="width:30px;height:30px;border-radius:50%;object-fit:cover">`;
+  }
+  document.getElementById('signOutBtn').style.display = 'block';
+}
+function clearUser() {
+  currentUser = null;
+  document.getElementById('userName').textContent = 'Not signed in';
+  document.getElementById('userEmail').textContent = 'Click to configure';
+  document.getElementById('userAvatar').innerHTML = '👤';
+  document.getElementById('signOutBtn').style.display = 'none';
+}
+async function googleSignIn() {
+  if (!sb) { showToast('Configure Supabase keys first.'); toggleSettings(); return; }
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
+  if (error) showToast('OAuth error: ' + error.message);
+}
+async function handleSignOut() {
+  if (sb) await sb.auth.signOut();
+  clearUser();
+  showToast('Signed out.');
+}
+
+// ═══════════════════════════════════════
+// SESSION STORAGE
+// ═══════════════════════════════════════
+async function saveSession(type, title, content) {
+  const session = { type, title, content, created_at: new Date().toISOString(), user_id: currentUser?.id || 'local' };
+  sessions.unshift(session);
+  localStorage.setItem('gvw_sessions', JSON.stringify(sessions.slice(0, 50)));
+  if (sb) {
+    try { await sb.from('sessions').insert(session); } catch(e) {}
+  }
+  renderSessions();
+}
+function loadLocalSessions() {
+  const s = localStorage.getItem('gvw_sessions');
+  if (s) { try { sessions = JSON.parse(s); renderSessions(); } catch(e) {} }
+}
+async function loadRemoteSessions() {
+  if (!sb) return;
+  try {
+    const q = sb.from('sessions').select('*').order('created_at', { ascending: false }).limit(50);
+    if (currentUser) q.eq('user_id', currentUser.id);
+    const { data } = await q;
+    if (data?.length) { sessions = data; renderSessions(); localStorage.setItem('gvw_sessions', JSON.stringify(sessions)); }
+  } catch(e) {}
+}
+function renderSessions() {
+  const list = document.getElementById('sessionList');
+  if (!sessions.length) { list.innerHTML = '<div class="empty-state" style="padding:30px 10px"><div class="icon">📡</div><p style="font-size:12px">Sessions appear here after your first intel refresh.</p></div>'; return; }
+  const typeColors = { reel: '#FF4FA3', post: '#9BE800', captions: '#D4AF37', intel: '#7C4DFF' };
+  list.innerHTML = sessions.map((s, i) => `
+    <div class="session-item" onclick="restoreSession(${i})">
+      <div class="s-title">${esc(s.title)}</div>
+      <div class="s-meta">
+        <span class="s-type" style="background:${typeColors[s.type]||'#5E5480'}22;color:${typeColors[s.type]||'#B09EFF'}">${s.type}</span>
+        <span>${new Date(s.created_at).toLocaleDateString()}</span>
+      </div>
+    </div>`).join('');
+}
+function restoreSession(i) {
+  const s = sessions[i];
+  if (!s) return;
+  openOutputModal(s.title, typeof s.content === 'string' ? s.content : JSON.stringify(s.content, null, 2));
+}
+function clearSessions() {
+  if (!confirm('Clear all session history?')) return;
+  sessions = [];
+  localStorage.removeItem('gvw_sessions');
+  renderSessions();
+  showToast('History cleared.');
+}
+
+// ═══════════════════════════════════════
+// GEMINI
+// ═══════════════════════════════════════
+async function callGemini(prompt, useSearch = false) {
+  const key = getKey();
+  if (!key) throw new Error('No Gemini API key — add it in Settings.');
+  const model = 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const tools = useSearch ? [{ google_search: {} }] : [];
+  const body = { contents: [{ parts: [{ text: prompt }] }], ...(tools.length ? { tools } : {}) };
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('\n') || '';
+}
+
+// ═══════════════════════════════════════
+// REFRESH INTEL
+// ═══════════════════════════════════════
+async function refreshIntel() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Scanning...';
+  document.getElementById('feed').innerHTML = '<div class="loading-card"><span class="spin"></span><br><br>Searching for the latest GTA 6 news...</div>';
+  try {
+    const today = new Date().toDateString();
+    const text = await callGemini(
+      `Search for the latest Grand Theft Auto 6 (GTA VI) news, Rockstar announcements, trailers, and leaks as of ${today}. GTA VI launches November 19 2026 at $79.99 base / $99.99 Ultimate Edition.
+Return ONLY a valid JSON array of 4-5 items, no markdown, no text before or after:
+[{"tag":"BREAKING|CONFIRMED|RUMOR|UPDATE","headline":"MAX 7 WORDS UPPERCASE WITH PERIOD","summary":"2-3 sentence factual summary","source":"outlet or Rockstar","date":"approximate date","angle":"one sharp content angle for a GTA 6 news creator on Instagram/TikTok/YouTube"}]
+Rules: unverified info tagged RUMOR. Headlines punchy and declarative. Max 5 items.`, true);
+    const clean = text.replace(/```json|```/g, '').trim();
+    const start = clean.indexOf('['), end = clean.lastIndexOf(']');
+    items = JSON.parse(clean.slice(start, end + 1));
+    renderFeed();
+    await saveSession('intel', `Intel — ${new Date().toLocaleDateString()}`, items);
+    showToast(`${items.length} drops loaded.`);
+  } catch (e) {
+    document.getElementById('feed').innerHTML = `<div class="loading-card">⚠️ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false; btn.innerHTML = '⚡ Refresh intel';
+}
+
+// ═══════════════════════════════════════
+// RENDER FEED
+// ═══════════════════════════════════════
+function renderFeed() {
+  document.getElementById('feedCount').textContent = items.length + ' drops on the wire';
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+  items.forEach((it, i) => {
+    const el = document.createElement('div');
+    el.className = 'intel-card';
+    el.innerHTML = `
+      <div class="card-top">
+        <div class="card-meta">
+          <span class="tag ${esc(it.tag)}">${esc(it.tag)}</span>
+          <span class="card-source">${esc(it.source||'')} · ${esc(it.date||'')}</span>
+        </div>
+        <div class="card-headline display">${esc(it.headline)}</div>
+        <div class="card-summary">${esc(it.summary)}</div>
+        ${it.angle ? `<div class="card-angle"><b>Angle:</b> ${esc(it.angle)}</div>` : ''}
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-grad btn-sm" onclick="makeReel(${i})">🎬 Reel brief</button>
+        <button class="btn btn-ghost btn-sm" onclick="makePost(${i})">🖼 Static post</button>
+        <button class="btn btn-ghost btn-sm" onclick="makeCaptions(${i})">💬 Captions</button>
+      </div>
+      <div id="out-${i}"></div>`;
+    feed.appendChild(el);
+  });
+}
+
+// ═══════════════════════════════════════
+// IMAGE PROMPT ENGINES (embedded skill DNA)
+// ═══════════════════════════════════════
+function getStyleBible() {
+  if (imageStyle === 'realistic') return `
+REALISTIC STYLE BIBLE (GTA VI UE5 — mandatory rules):
+- NOT real photography. NOT cartoon. NOT GTA V.
+- Unreal Engine 5 hyperrealistic — impossible photographic fidelity, "too perfect" quality
+- Lighting: Warm golden hour primary (amber/coral/honey-gold) + teal/cool blue fill. Backlight or 3/4 backlight always. Never flat or cold.
+- Color grade: Warm amber-gold-coral dominant, teal-cyan secondary, lifted blacks, slightly blown warm highlights
+- Characters: Hyperdetailed pores/sweat/tan, strand-level hair, idealized athletic proportions, gold jewelry always hyperdetailed
+- Environment: Florida/South Beach/Vice City only. Populated backgrounds, hyperdetailed surfaces
+- Camera: ARRI Alexa 35 equivalent, golden hour cinematic grade
+- CRITICAL: Keep lower third (bottom 35% of frame) clear of subjects — reserved for text overlay`;
+  else return `
+ILLUSTRATION STYLE BIBLE (GTA VI Poster Art — mandatory rules):
+- NOT photorealistic. NOT flat vector. Premium hand-painted digital illustration — DC/Marvel variant cover quality
+- Sky/background: ALWAYS coral-salmon → amber → lavender-purple gradient. Non-negotiable.
+- Lighting: Bold painted highlight strokes (warm amber-gold key) + cool lavender-purple fill. Visible brushwork marks.
+- Skin: 4-tone painted — deep mahogany shadow / rich brown mid / warm tan-caramel base / bright cream-gold highlight strokes. Brushwork visible.
+- Hair: Each curl individually drawn with dark outline + amber-caramel highlight. Full mass has warm amber rim halo.
+- Gold jewelry: Bold graphic 2-tone painted forms — not photorealistic
+- Background: Semi-flat painted Art Deco Vice City architecture in muted teal-mint and lavender. Palm tree silhouettes.
+- CRITICAL: Keep lower third (bottom 35% of frame) clear of subjects — reserved for text overlay`;
+}
+
+function buildScenePromptInstructions(sceneDesc, beat) {
+  const target = getSetting('setImgTarget') || 'Nano Banana Pro';
+  return `Generate a GTA VI Wire image prompt for this scene.
+Scene: ${sceneDesc}
+Beat: ${beat}
+Target generator: ${target}
+Image style: ${imageStyle.toUpperCase()}
+
+${getStyleBible()}
+
+Output ONLY a valid JSON object with these exact keys (no markdown, no text before or after):
+{
+  "render_style": "one sentence describing the visual language",
+  "prompt": "one long cinematic paragraph — scene, subjects, action, environment, light, mood, camera",
+  "subjects": {"description": "...", "pose": "...", "clothing": "...", "expression": "..."},
+  "environment": {"location": "...", "background": "...", "atmosphere": "..."},
+  "composition": {"framing": "...", "lower_third": "CLEAR — reserved for text overlay. No subjects in bottom 35% of frame."},
+  "camera": {"equivalent": "...", "focal_length": "...", "aperture": "...", "angle": "..."},
+  "lighting": {"key": "...", "fill": "...", "mood": "..."},
+  "color_grade": {"primary": "...", "secondary": "...", "skin": "...", "style": "${imageStyle}"},
+  "negative_prompt": ["no baked-in text", "no watermarks", "no subjects in lower third of frame", "no low resolution", ${imageStyle === 'realistic' ? '"no cartoon style", "no flat lighting", "no GTA V graphics"' : '"no photorealism", "no flat vector art", "no SVG style"'}],
+  "aspect_ratio": "9:16"
+}`;
+}
+
+// ═══════════════════════════════════════
+// REEL BRIEF — multi-scene
+// ═══════════════════════════════════════
+const SCENE_DEFS = [
+  { beat: 'Scene 1 — Hook (0–4s)', desc: 'Opening establishing shot — set the scene and urgency. Must immediately pull attention. Context: visualise the core topic, not just lifestyle.' },
+  { beat: 'Scene 2 — The Detail (4–8s)', desc: 'Mid-section revealing the key fact or the sting. The visual must directly illustrate the information on screen.' },
+  { beat: 'Scene 3 — The Closer (8–11.5s)', desc: 'Final beat — tension, question, or call to action. Leave the viewer with something to think about or react to.' },
+];
+
+async function makeReel(i) {
+  const it = items[i];
+  const out = document.getElementById('out-' + i);
+  out.innerHTML = `<div style="padding:16px 20px"><div class="loading-card"><span class="spin"></span><br><br>Writing multi-scene brief + generating ${imageStyle} image prompts...</div></div>`;
+
+  try {
+    // Generate Remotion brief
+    const brief = await callGemini(`You are the producer for GTA VI Wire (@gtaviwire). Voice: short, declarative, confident.
+News drop: [${it.tag}] ${it.headline} — ${it.summary}
+Settings: subtitleStyle=${getSetting('setSub')||'gta-caps'}, accentWorld=${getSetting('setAccent')||'sunset'}
+
+Write a Remotion multi-scene reel brief in plain text:
+TEMPLATE: NewsFlash (3 scenes, 13s total, no outro/brand card)
+SCENE BREAKDOWN:
+  Scene 1 (0–4s): headline + hook copy (max 8 words, all caps + period)
+  Scene 2 (4–8s): the detail / the sting (factual copy)
+  Scene 3 (8–11.5s): closer / community question
+NARRATION: 3 punchy lines (one per scene)
+LAYOUT: use locked master template — GTAArtDeco Condensed Bold 148px headline, GTAArtDeco Medium 54px subhead, GTAArtDeco Regular 30px body. Bottom-anchored, auto-wrap, never clip.`);
+
+    // Generate 3 scene-specific image prompts
+    const scenePrompts = [];
+    for (let s = 0; s < SCENE_DEFS.length; s++) {
+      const sd = SCENE_DEFS[s];
+      const sceneContext = s === 0 ? it.headline : s === 1 ? it.summary : (it.angle || it.summary);
+      const p = await callGemini(buildScenePromptInstructions(`${sd.desc} Topic context: ${sceneContext}`, sd.beat));
+      const clean = p.replace(/```json|```/g,'').trim();
+      const si = clean.indexOf('{'), se = clean.lastIndexOf('}');
+      let parsed = {};
+      try { parsed = JSON.parse(clean.slice(si, se+1)); } catch(e) { parsed = {prompt: clean}; }
+      scenePrompts.push(parsed);
+    }
+
+    const content = { brief, scenePrompts, style: imageStyle, settings: { sub: getSetting('setSub'), accent: getSetting('setAccent'), imgTarget: getSetting('setImgTarget') } };
+    await saveSession('reel', it.headline, content);
+
+    out.innerHTML = buildReelOutput(brief, scenePrompts, i);
+  } catch(e) {
+    out.innerHTML = `<div style="padding:12px 20px"><p style="color:#FF6B6B;font-size:13px">⚠️ ${esc(e.message)}</p></div>`;
+  }
+}
+
+function buildReelOutput(brief, scenePrompts, idx) {
+  const styleLabel = imageStyle === 'realistic' ? '⚡ Realistic' : '🎨 Illustration';
+  return `<div class="output-panel">
+    <div class="output-head">
+      <h4>🎬 Reel Brief — ${styleLabel} images</h4>
+      <button class="btn btn-xs btn-ghost" onclick="copyText(document.getElementById('reel-brief-${idx}').textContent)">Copy brief</button>
+    </div>
+    <div class="output-body">
+      <pre id="reel-brief-${idx}">${esc(brief)}</pre>
+    </div>
+    <div style="padding:14px 18px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Scene image prompts (${styleLabel})</span>
+        <div class="style-toggle" style="transform:scale(.85);transform-origin:left">
+          <button class="${imageStyle==='realistic'?'active':''}" onclick="setStyle('realistic');makeReel(${idx})">⚡ Realistic</button>
+          <button class="${imageStyle==='illustration'?'active':''}" onclick="setStyle('illustration');makeReel(${idx})">🎨 Illustration</button>
+        </div>
+      </div>
+      <div class="scenes">
+        ${scenePrompts.map((p, si) => `
+        <div class="scene-card">
+          <div class="scene-label">${SCENE_DEFS[si].beat}</div>
+          <div class="scene-beat">${esc(SCENE_DEFS[si].desc.split('—')[0].trim())}</div>
+          <div class="scene-prompt-preview">${esc(typeof p === 'object' ? JSON.stringify(p, null, 2) : p)}</div>
+          <button class="btn btn-grad btn-xs" style="width:100%" onclick="copyText(${JSON.stringify(JSON.stringify(scenePrompts[si], null, 2))})">Copy Scene ${si+1} JSON</button>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// STATIC POST BRIEF
+// ═══════════════════════════════════════
+async function makePost(i) {
+  const it = items[i];
+  const out = document.getElementById('out-' + i);
+  out.innerHTML = `<div style="padding:16px 20px"><div class="loading-card"><span class="spin"></span><br><br>Writing post brief + ${imageStyle} image prompt...</div></div>`;
+  try {
+    const [copy, imgPromptRaw] = await Promise.all([
+      callGemini(`Write a GTA VI Wire (@gtaviwire) static post brief. Voice: short, declarative, confident.
+News: [${it.tag}] ${it.headline} — ${it.summary}
+Output plain text:
+SLIDE COPY: headline (max 6 words uppercase ending with period) + 2-line subtext
+CAPTION: 2-3 lines, hook first, ends with community question
+HASHTAGS: 15 tags mixing #GTA6 #GTAVI #RockstarGames + niche tags`),
+      callGemini(buildScenePromptInstructions(`Single hero image for post. Topic: ${it.headline} — ${it.summary}. Must directly illustrate the topic content, not generic lifestyle.`, 'Static post hero'))
+    ]);
+
+    const clean = imgPromptRaw.replace(/```json|```/g,'').trim();
+    const si = clean.indexOf('{'), se = clean.lastIndexOf('}');
+    let imgJSON = {};
+    try { imgJSON = JSON.parse(clean.slice(si,se+1)); } catch(e) { imgJSON = {prompt: clean}; }
+    const styleLabel = imageStyle === 'realistic' ? '⚡ Realistic' : '🎨 Illustration';
+
+    await saveSession('post', it.headline, { copy, imgJSON, style: imageStyle });
+
+    out.innerHTML = `<div class="output-panel">
+      <div class="output-head"><h4>🖼 Post Brief — ${styleLabel}</h4><button class="btn btn-xs btn-ghost" onclick="copyText(document.getElementById('post-copy-${i}').textContent)">Copy copy</button></div>
+      <div class="output-body"><pre id="post-copy-${i}">${esc(copy)}</pre></div>
+      <div style="padding:14px 18px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Image Prompt (${styleLabel})</span>
+          <div class="style-toggle" style="transform:scale(.85);transform-origin:left">
+            <button class="${imageStyle==='realistic'?'active':''}" onclick="setStyle('realistic');makePost(${i})">⚡ Realistic</button>
+            <button class="${imageStyle==='illustration'?'active':''}" onclick="setStyle('illustration');makePost(${i})">🎨 Illustration</button>
+          </div>
+          <button class="btn btn-xs btn-grad" style="margin-left:auto" onclick="copyText(${JSON.stringify(JSON.stringify(imgJSON, null, 2))})">Copy JSON prompt</button>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:11.5px;color:#B8AADD;font-family:'SF Mono',Menlo,monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;line-height:1.55">${esc(JSON.stringify(imgJSON,null,2))}</div>
+      </div>
+    </div>`;
+  } catch(e) {
+    out.innerHTML = `<div style="padding:12px 20px"><p style="color:#FF6B6B;font-size:13px">⚠️ ${esc(e.message)}</p></div>`;
+  }
+}
+
+// ═══════════════════════════════════════
+// CAPTIONS
+// ═══════════════════════════════════════
+async function makeCaptions(i) {
+  const it = items[i];
+  const out = document.getElementById('out-' + i);
+  out.innerHTML = `<div style="padding:16px 20px"><div class="loading-card"><span class="spin"></span><br><br>Writing platform captions...</div></div>`;
+  try {
+    const text = await callGemini(`Write GTA VI Wire (@gtaviwire) captions. Voice: short, declarative, confident, community-driving.
+News: [${it.tag}] ${it.headline} — ${it.summary}
+Output:
+INSTAGRAM: 3-line caption, hook first, ends with a question
+YOUTUBE SHORT TITLE: max 60 chars, curiosity-driven
+YOUTUBE SHORT DESC: 2 lines
+TIKTOK: 1-line + 5 inline hashtags
+HASHTAG SET: 18 tags (mega + mid + niche)
+${it.tag==='RUMOR'?'Include "unverified" wording in copy.':''}`);
+
+    await saveSession('captions', it.headline, text);
+    out.innerHTML = `<div class="output-panel">
+      <div class="output-head"><h4>💬 Captions & Hashtags</h4><button class="btn btn-xs btn-ghost" onclick="copyText(document.getElementById('cap-${i}').textContent)">Copy all</button></div>
+      <div class="output-body"><pre id="cap-${i}">${esc(text)}</pre></div>
+    </div>`;
+  } catch(e) {
+    out.innerHTML = `<div style="padding:12px 20px"><p style="color:#FF6B6B;font-size:13px">⚠️ ${esc(e.message)}</p></div>`;
+  }
+}
+
+// ═══════════════════════════════════════
+// MODAL + COPY
+// ═══════════════════════════════════════
+function openOutputModal(title, content) {
+  currentOutput = content;
+  document.getElementById('outputTitle').textContent = title;
+  document.getElementById('outputBody').innerHTML = `<div style="padding:16px 20px"><pre style="font-size:12px;line-height:1.6;color:#D4C8FF;white-space:pre-wrap;word-break:break-word;font-family:'SF Mono',Menlo,monospace">${esc(content)}</pre></div>`;
+  document.getElementById('outputModal').classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openSetupModal() { document.getElementById('setupModal').classList.add('open'); }
+function copyOutput() { copyText(currentOutput); }
+function copyText(text) {
+  const done = () => showToast('Copied to clipboard.');
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch(e) { showToast('Select and copy manually.'); }
+  document.body.removeChild(ta);
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  if (window.innerWidth <= 768) sb.classList.toggle('open');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+</script>
+</body>
+</html>
