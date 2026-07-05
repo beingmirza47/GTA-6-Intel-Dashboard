@@ -374,6 +374,14 @@ body{
 
 <script>
 // ═══════════════════════════════════════
+// DEFAULTS
+// ═══════════════════════════════════════
+const DEFAULTS = {
+  sbUrl: 'https://bfulfspswlrcxkpjjgrw.supabase.co',
+  sbKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmdWxmc3Bzd2xyY3hrcGpqZ3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTkzODgsImV4cCI6MjA5ODgzNTM4OH0.kVFukV0QRBX3s0kikynRFqLBR6h8IRWKz5-FpFELDMw',
+};
+
+// ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
 const LAUNCH = new Date('2026-11-19T00:00:00');
@@ -415,7 +423,10 @@ function daysLeft() { return Math.max(0, Math.floor((LAUNCH - new Date()) / 8640
 // ═══════════════════════════════════════
 function loadSettings() {
   const k = ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'];
-  k.forEach(id => { const v = localStorage.getItem('gvw_' + id); if (v && document.getElementById(id)) document.getElementById(id).value = v; });
+  k.forEach(id => {
+    const v = localStorage.getItem('gvw_' + id) || DEFAULTS[id] || '';
+    if (v && document.getElementById(id)) document.getElementById(id).value = v;
+  });
 }
 function saveSettings() {
   ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'].forEach(id => {
@@ -435,7 +446,7 @@ function toggleVis(id) {
   el.type = el.type === 'password' ? 'text' : 'password';
 }
 function getKey() { return localStorage.getItem('gvw_geminiKey') || document.getElementById('geminiKey')?.value || ''; }
-function getSetting(id) { return localStorage.getItem('gvw_' + id) || document.getElementById(id)?.value || ''; }
+function getSetting(id) { return localStorage.getItem('gvw_' + id) || document.getElementById(id)?.value || DEFAULTS[id] || ''; }
 
 // ═══════════════════════════════════════
 // IMAGE STYLE TOGGLE
@@ -513,8 +524,8 @@ function loadLocalSessions() {
 async function loadRemoteSessions() {
   if (!sb) return;
   try {
-    const q = sb.from('sessions').select('*').order('created_at', { ascending: false }).limit(50);
-    if (currentUser) q.eq('user_id', currentUser.id);
+    let q = sb.from('sessions').select('*').order('created_at', { ascending: false }).limit(50);
+    if (currentUser) q = q.eq('user_id', currentUser.id);
     const { data } = await q;
     if (data?.length) { sessions = data; renderSessions(); localStorage.setItem('gvw_sessions', JSON.stringify(sessions)); }
   } catch(e) {}
@@ -575,9 +586,7 @@ async function refreshIntel() {
 Return ONLY a valid JSON array of 4-5 items, no markdown, no text before or after:
 [{"tag":"BREAKING|CONFIRMED|RUMOR|UPDATE","headline":"MAX 7 WORDS UPPERCASE WITH PERIOD","summary":"2-3 sentence factual summary","source":"outlet or Rockstar","date":"approximate date","angle":"one sharp content angle for a GTA 6 news creator on Instagram/TikTok/YouTube"}]
 Rules: unverified info tagged RUMOR. Headlines punchy and declarative. Max 5 items.`, true);
-    const clean = text.replace(/```json|```/g, '').trim();
-    const start = clean.indexOf('['), end = clean.lastIndexOf(']');
-    items = JSON.parse(clean.slice(start, end + 1));
+    items = safeParseJSON(text);
     renderFeed();
     await saveSession('intel', `Intel — ${new Date().toLocaleDateString()}`, items);
     showToast(`${items.length} drops loaded.`);
@@ -703,10 +712,8 @@ LAYOUT: use locked master template — GTAArtDeco Condensed Bold 148px headline,
       const sd = SCENE_DEFS[s];
       const sceneContext = s === 0 ? it.headline : s === 1 ? it.summary : (it.angle || it.summary);
       const p = await callGemini(buildScenePromptInstructions(`${sd.desc} Topic context: ${sceneContext}`, sd.beat));
-      const clean = p.replace(/```json|```/g,'').trim();
-      const si = clean.indexOf('{'), se = clean.lastIndexOf('}');
       let parsed = {};
-      try { parsed = JSON.parse(clean.slice(si, se+1)); } catch(e) { parsed = {prompt: clean}; }
+      try { parsed = safeParseJSON(p); } catch(e) { parsed = {prompt: p}; }
       scenePrompts.push(parsed);
     }
 
@@ -768,10 +775,8 @@ HASHTAGS: 15 tags mixing #GTA6 #GTAVI #RockstarGames + niche tags`),
       callGemini(buildScenePromptInstructions(`Single hero image for post. Topic: ${it.headline} — ${it.summary}. Must directly illustrate the topic content, not generic lifestyle.`, 'Static post hero'))
     ]);
 
-    const clean = imgPromptRaw.replace(/```json|```/g,'').trim();
-    const si = clean.indexOf('{'), se = clean.lastIndexOf('}');
     let imgJSON = {};
-    try { imgJSON = JSON.parse(clean.slice(si,se+1)); } catch(e) { imgJSON = {prompt: clean}; }
+    try { imgJSON = safeParseJSON(imgPromptRaw); } catch(e) { imgJSON = {prompt: imgPromptRaw}; }
     const styleLabel = imageStyle === 'realistic' ? '⚡ Realistic' : '🎨 Illustration';
 
     await saveSession('post', it.headline, { copy, imgJSON, style: imageStyle });
@@ -862,6 +867,22 @@ function showToast(msg) {
 }
 function esc(s) {
   return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function safeParseJSON(text) {
+  const clean = text.replace(/```json|```/g, '').trim();
+  // Try direct parse first
+  try { return JSON.parse(clean); } catch {}
+  // Extract outermost array or object
+  const isArr = clean.includes('[');
+  const open = isArr ? '[' : '{', close = isArr ? ']' : '}';
+  const start = clean.indexOf(open), end = clean.lastIndexOf(close);
+  if (start === -1 || end === -1) throw new Error('No JSON structure found in response.');
+  const slice = clean.slice(start, end + 1);
+  try { return JSON.parse(slice); } catch {}
+  // Fix trailing commas and retry
+  const fixed = slice.replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(fixed);
 }
 </script>
 </body>
