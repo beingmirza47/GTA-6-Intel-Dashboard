@@ -283,6 +283,11 @@ body{
           <label>Image target</label>
           <select id="setImgTarget"><option value="Nano Banana Pro">Nano Banana Pro</option><option value="GPT Image">GPT Image</option><option value="Higgsfield">Higgsfield</option></select>
         </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Extra sources (Instagram pages, websites)</label>
+          <input type="text" id="customSources" placeholder="e.g. @gtavi_leaks, @gtavinews, insider-gaming.com">
+          <span class="helper">Comma-separated. Added to every intel search alongside IGN, Rockstar, Take-Two, Game Insider, Fandom.</span>
+        </div>
       </div>
       <div class="save-row">
         <button class="btn btn-grad btn-sm" onclick="saveSettings()">Save settings</button>
@@ -422,14 +427,14 @@ function daysLeft() { return Math.max(0, Math.floor((LAUNCH - new Date()) / 8640
 // SETTINGS
 // ═══════════════════════════════════════
 function loadSettings() {
-  const k = ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'];
+  const k = ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget','customSources'];
   k.forEach(id => {
     const v = localStorage.getItem('gvw_' + id) || DEFAULTS[id] || '';
     if (v && document.getElementById(id)) document.getElementById(id).value = v;
   });
 }
 function saveSettings() {
-  ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget'].forEach(id => {
+  ['geminiKey','sbUrl','sbKey','setSub','setAccent','setImgTarget','customSources'].forEach(id => {
     const el = document.getElementById(id);
     if (el) localStorage.setItem('gvw_' + id, el.value);
   });
@@ -546,6 +551,47 @@ function renderSessions() {
 function restoreSession(i) {
   const s = sessions[i];
   if (!s) return;
+
+  if (s.type === 'intel' && Array.isArray(s.content)) {
+    // Restore full feed with all cards and action buttons
+    items = s.content;
+    renderFeed();
+    document.getElementById('sessionList').querySelectorAll('.session-item').forEach((el, idx) => {
+      el.classList.toggle('active', idx === i);
+    });
+    document.querySelector('.content').scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('Intel session restored.');
+    return;
+  }
+
+  if (s.type === 'reel' && s.content?.brief) {
+    const { brief, scenePrompts } = s.content;
+    const savedStyle = s.content.style || imageStyle;
+    const html = buildReelOutput(brief, scenePrompts || [], 'r' + i);
+    document.getElementById('outputTitle').textContent = s.title;
+    document.getElementById('outputBody').innerHTML = `<div style="padding:16px 20px">${html}</div>`;
+    document.getElementById('outputModal').classList.add('open');
+    return;
+  }
+
+  if (s.type === 'post' && s.content?.copy) {
+    const { copy, imgJSON, style } = s.content;
+    const styleLabel = (style || imageStyle) === 'realistic' ? '⚡ Realistic' : '🎨 Illustration';
+    document.getElementById('outputTitle').textContent = s.title;
+    document.getElementById('outputBody').innerHTML = `<div style="padding:0">
+      <div class="output-panel" style="margin:0;border:none">
+        <div class="output-head"><h4>🖼 Post Brief — ${styleLabel}</h4></div>
+        <div class="output-body"><pre>${esc(copy)}</pre></div>
+        <div style="padding:14px 18px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Image Prompt (${styleLabel})</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:11.5px;color:#B8AADD;font-family:'SF Mono',Menlo,monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;line-height:1.55">${esc(JSON.stringify(imgJSON,null,2))}</div>
+        </div>
+      </div></div>`;
+    document.getElementById('outputModal').classList.add('open');
+    return;
+  }
+
+  // captions or fallback
   openOutputModal(s.title, typeof s.content === 'string' ? s.content : JSON.stringify(s.content, null, 2));
 }
 function clearSessions() {
@@ -581,11 +627,23 @@ async function refreshIntel() {
   document.getElementById('feed').innerHTML = '<div class="loading-card"><span class="spin"></span><br><br>Searching for the latest GTA 6 news...</div>';
   try {
     const today = new Date().toDateString();
+    const sources = getSetting('customSources') || '';
+    const extraSources = sources ? `\nAlso check these additional sources: ${sources}` : '';
     const text = await callGemini(
       `Search for the latest Grand Theft Auto 6 (GTA VI) news, Rockstar announcements, trailers, and leaks as of ${today}. GTA VI launches November 19 2026 at $79.99 base / $99.99 Ultimate Edition.
-Return ONLY a valid JSON array of 4-5 items, no markdown, no text before or after:
-[{"tag":"BREAKING|CONFIRMED|RUMOR|UPDATE","headline":"MAX 7 WORDS UPPERCASE WITH PERIOD","summary":"2-3 sentence factual summary","source":"outlet or Rockstar","date":"approximate date","angle":"one sharp content angle for a GTA 6 news creator on Instagram/TikTok/YouTube"}]
-Rules: unverified info tagged RUMOR. Headlines punchy and declarative. Max 5 items.`, true);
+
+PRIORITY SOURCES — search these specifically and prefer results from them:
+- ign.com (search "site:ign.com GTA 6")
+- rockstargames.com (search "site:rockstargames.com GTA VI")
+- fandom.com GTA wiki (search "site:gta.fandom.com")
+- take2games.com / Take-Two Interactive investor news
+- gameinsider.com (search "site:gameinsider.com GTA 6")
+- Instagram accounts: @rockstargames, @gtaviwire, @gtaviupdates, @gtavi.news, @imaginegta6, @project.vice, @gta6ixworld${extraSources}
+
+Collect the most recent unique stories from as many of these sources as possible.
+Return ONLY a valid JSON array of 5-8 items, no markdown, no text before or after:
+[{"tag":"BREAKING|CONFIRMED|RUMOR|UPDATE","headline":"MAX 7 WORDS UPPERCASE WITH PERIOD","summary":"2-3 sentence factual summary","source":"exact outlet name or handle","date":"approximate date","angle":"one sharp content angle for a GTA 6 news creator on Instagram/TikTok/YouTube"}]
+Rules: unverified or Instagram-only info tagged RUMOR. Official Rockstar/Take-Two = CONFIRMED. Headlines punchy and declarative.`, true);
     items = safeParseJSON(text);
     renderFeed();
     await saveSession('intel', `Intel — ${new Date().toLocaleDateString()}`, items);
